@@ -1,4 +1,4 @@
-Thanks for the nice introduction, Halil, and: Hello everyone, welcome to my talk about writing code for production environments. Now, what _is_ production?
+Hello everyone, welcome to my talk about writing code for production environments. Now, what _is_ production?
 
 ---
 
@@ -147,9 +147,3 @@ Find ways to include it into your agile process. For example, try estimating the
 Because it shouldn't contradict your _definition of done_. While coding, in every review, and before merging, make a point of explicitely asking yourself and maybe your team: Does this code change make the code base better? As in: Easier to reason about, more transparent, less generic? Because if it's not making it better, it's making it worse. And only rarely does a new feature merit making the code base worse.
 
 A fear-free code base isn't something you achieve once and be done with it: It's the result of an ongoing, continuous process, and I'd like to encourage you all to try it.
-
-Halil, do we have time for questions?
-
----
-
-That's it, I hope you enjoyed my talk. Thanks a lot, and many thanks to all the organizers of PyCon Turkey, you are doing a great job. See you!
