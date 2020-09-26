@@ -1,0 +1,101 @@
+= Writing Production Software
+
+== „production“
+
+The code (and the platform it runs on) that, if it stops working, means that your product stops working, and your business has a problem.
+
+== Who? Me?
+
+Christian Schramm
+
+== Story: Paralysis by fear
+
+== Why even be afraid?
+
+- Development is change.
+- Change means things can break.
+- Production breakage can be really, really bad.
+
+== Fear-Free Software Development
+
+Good production software is the result of a _fear-free software development_ culture and process.
+
+== What _not_ to do: Predicting know the future
+
+You don't control business requirements.
+
+== Story: The generic data converter for APIs
+
+== Don't generalize the problem
+
+Solve it. Abstraction is debt. Don't generalize to procrastinate.
+
+== Example: Error handling
+
+[source,python]
+----
+try:
+    result = requests.get(url, raise_for_status=True)
+except HTTPError as e:
+    logging.error("request failed with status %s", e.status)
+    raise
+----
+
+== Don't write error-handling code
+
+The breakage you can anticipate is most likely not your problem.
+
+== Example: The good old code
+
+[source,python]
+----
+if config.OLD_BEHAVIOUR:
+    ...
+else:
+   ...
+----
+
+== Don't carry around old code or behavior
+
+And don't make runtime switches for behaviour change.
+
+== What to do
+
+== Make sure your deployment process is a joy 
+
+Because that's where _change_ is supposed to happen.
+
+== Story: Too many products
+
+== If it can fail, make it fail _right now_
+
+== Make it easy to reason about
+
+That's often more an issue of application design than code quality.
+
+== Example: Task restart
+
+== Make operations idempotent
+
+It should not make a difference it you execute an operation once or more. Test it.
+
+== Example: State exchange between tasks
+
+== Design around state transparency
+
+You should always be able to tell the exact state of your entire application, _right now_.
+
+== Summing up Fear-Free Software Development
+
+- Think about the future, but don't try to predict it.
+- Strife to make the present code and application state easy to reason about.
+- Make sure changes (and failures) happen at deployment time. 
+
+== Applying the principles of FFSD
+
+- get your team on board
+- Get your product owner on board
+- Integrate it into your agile process
+- Integrate it in your _definition of done_
+
+== Thanks!

@@ -1,0 +1,155 @@
+Thanks for the nice introduction, Halil, and: Hello everyone, welcome to my talk about writing code for production environments. Now, what _is_ production?
+
+---
+
+Technically, it comes from the destinction between development, staging, qa, and production environments, where your code runs, with the latter being the one that actually produces value for your business. Which means on the flipside, if it doesn't work, or works in unintented ways, you have problem. We don't want to have problems. How do we develop for production then?
+
+---
+
+Who am I to tell you about this? I write Python software professionally since 2007, and  since that time, I've seen, produced and deployed a lot of code that sometimes made a lot of people very unhappy, including myself. 
+
+But there have been key moments that struck with me, and I want to share one with you.
+
+---
+
+A few years ago, I found myself in a new team after a restructuring. We had inherited a fairly big chunk of data engineering code and systems. A lot of it was old, hasn't been touched in years, and the people who wrote it had long left the company. We wanted to gradually modernize it, but struggled to get a hold on it. So we hired an experienced software engineer as a consultant – something I really encourage you to do as well if you find yourself stuck. He listened to our problems and then told us: Our problem was that we were afraid. Because every change we do could be catastrophic, we would not dare even touching the painful parts. So in this mental state, he told us, we can't address the core issues. Instead, we should first strive to eliminate the fear. In our specific case, that included building a real staging environment and other stuff I will touch upon later, but the important take-away for me was the idea that it was _fear_ that was holding us back.
+
+---
+
+We're software developers – why would we even be afraid? I'll argue that it's a central problem inherent in our job. Because developing software is developing change. A software engineer's work, _if it's meaningful_, will always result in a change to the behaviour of some software that's important to others. And there's no way around it: If we change how things work, things might not work out the way we intended to, because we solve hard problems, and we make errors doing so. And in production environments, that can get really expensive.
+
+So yeah, that's ample cause to be afraid. But I hope we can all agree that being afraid is a toxic feeling that makes us unproductive and worse, unhappy.
+
+---
+
+That leads to my thesis that good production code is the result of Fear-Free Software Development. What is Fear-Free Software Development, you ask? That's what this talk is about, and at the end of it, you will hopefully have an idea what contributes to it and what doesn't, and how to apply it. Now in addition to technical stuff there's a whole cultural and communications dimension to FFSD that I won't even touch upon today, because our time is limited.
+
+Now, fear: There are two ways to deal with it in software development. Both are well intentioned, but one of them doesn't work.
+
+---
+
+Let's start with what _doesn't_ work. It's predicting the future. That's not a very controversial statement, I know, but we often unknowingly fall into that trap. Let me tell you a story.
+
+---
+
+Just a few months ago I needed to write an interface for our data in our database to a few external APIs. These APIs were all different, weirdly documented and hard to test against, which is scary in and by itself. I thought to myself: I don't want to repeat myself over and over for all these different APIs, so I'll write a generic way to export our data in JSON and then transform that JSON into the different representations the different APIs need. I was a few days in before I realized: What I was writing was an interpreter for a descriptive language for data transformations. That language already exists. It's called Python. I wouldn't gain anything to write my framework on top of it, but I'd lose a lot: Users of my framework would have to learn it, so I'd have to write great documentation, which I probably wouldn't. It would have a lot of interesting ways to fail, so debugging would be a pain. It would always be incomplete. And so on and so forth.
+
+I threw it all away and just wrote different Python functions to output the data in the different representations, and I made none of it configurable, and everything hardcoded, and that was 100% the right decision.
+
+---
+
+When you have a problem to solve, start by solving it, and not the generalization of it. You might ask: And what does that have to do with fear? It's two-fold: First I felt very uncomfortable around the edges of my problem. Both the external interfaces and the data layer of Odoo, the framework I had to work with, were somewhat brittle. I thought by constraining the problem space so that certain classes of problems could never arise, I would limit future breakage. But the reality was that the APIs were sufficiently different, so that there wasn't overly much in common anyway, and my framework's surface would be so large that not much be much constrainment happening.
+
+Secondly, and that is maybe the more important point: As I said, I felt uncomfortable around some parts of the problem. As long as I was solving a generic problem, I was in a safe space. I was producing code, I felt productive, and I was feeling very clever. In reality I was procrastinating. I was putting off the actual problem. It's a phenomenon I've seen a lot in my career, both with me and others, sometimes very smart coders. As long as you write a framework, stack abstract base classes on top of another, write Domain Specific Languages, whatever, you can even deploy that code: It won't change production behaviour. Things won't break, you're safe. You might even get recognition for your productivity and your cleverness. But in reality you just make things worse for everyone.
+
+If you've seen the introduction talk at the beginning of the conference, note how Daniele hit a pretty similar note: If you remain in your pleasure zone safe space, you're not solving the things you actually need to solve. Those are the ones that make you uncomfortable, in his words: That give you pain.
+
+That's not to say that abstraction is always wrong. But always start with solving a problem, and that always includes meaningful changes to production behaviour. If you have a second, similar problem: Don't abstract right away. Instead, duplicate code. That's probably contrary to a lot of advice you've heard, but bear in mind: It's good advice for beginners not to duplicate code, but if you are writing code professionally, you _are_ able to deal with it responsibly. Duplicated code is not great, but it's so much better than the wrong abstraction, and your first attempt at abstracting something _will_ be wrong. If the problem becomes common over time, factor out some commonality into a library, but if you can help it, don't write a framework, and don't wrap things.
+
+---
+
+A more concrete example of trying to predict the future is having error handling code. The following is a bit simplistic, but not entirely unreasonable, is it? We use the `requests` library to fetch the result of an URL, and if the status is not SUCCESS, we raise. In the exception case, we log the status and re-raise the Exception.
+
+There's problems with it, though. The first one is minor, but can still be a gotcha: `HTTPError` is not the base exception that `requests.get` can raise. So if we, reasonably, assume that the error handling block will get executed every time `requests.get` fails, we'd be wrong.
+
+The second problem is worse, though: The exception `e` doesn't have an attribute called `status`. That's not something that is immediately obvious: If I saw code like this, my eyes would probably just glance over it. Maybe your IDE _would_ catch it, but since object attributes are a very dynamic thing in Python, you absolutely can't rely on that. So trying to access it would raise an AttributeError. Python3 has exception chaining, so the original exception wouldn't be lost, but it would definitely make debugging a lot more confusing. Plus, there are errors that can't raise an Exception, like if you produce an OOM in the error handling block. Then your original error would get lost, and debugging would be _hell_.
+
+---
+
+The problem with error handling code is that, _most_ of the time, it's dead code. It doesn't get executed on the regular, or at all. And that makes it dangerous, because context changes over time, the code around it changes over time, but the error handling code might not get touched in years, and since it's never executed, bugs won't manifest themselves _until_ there's a breakage. Then it get's executed, and the absolutely worst time you want to run stale code is when shit is already hitting the fan.
+
+We can't predict the actual problem that will arise, even though we are very clever. Just let the process fail. Your process supervisor, systemd, or your service or container supervisor, kubernetes, or whatever you use, will make sure that things get adequately logged, restarted, marked as failed or whatever. That's the correct level to deal with errors.
+
+I've also seen code that swallows errors and just keeps chugging along, with the reasoning being: It's production code, so it needs to be running, we can't allow it to fail. Again, that invites so much evil into your life, because at that point wrong data may be written, important data may not be written, and you start no not be able to trust you data and application state. Instead: Fail. Don't be afraid of immediate breakage, but be aware that not being able to trust your data or application state is breeding pretty bad low level anxiety.
+
+---
+
+A second example deals with the common thought: This piece of code was useful in the past, it might be useful in the future. So old code is left hanging around, sometimes behind a switch like _that_, because you never know, right?
+
+---
+
+Don't do it. Even though your old code was _so_ clever. `git` has your back, your code can still be found, but if you make a change, commit to it, don't try to safeguard it. Worst of all, don't make your codes behaviour changable with a runtime switch. Changes should happen at deployment time, and only then.
+
+---
+
+What _should_ you do, then? Well, speaking of deployment:
+
+---
+
+Make sure your deployment story brings joy into your life. This is absolutely crucial for Fear-Free Software Development. I won't tell you how to do that, because it's out of scope and is more of a platform topic than anything else, but I tell you that: Joyful deployment is possible. You don't have to be stuck with a shitty deployment process. There's great tools out there, Ansible, Nomad, Kubernetes, countless Continuous Integration tools: Use them. There's even solutions for reversible database migrations and stuff. One idea that most of these systems have in common is that deployment is less about detailing and executing a number of steps, but more describing the correct and up-to-date state your systems should be in, and the tooling sees to making that happen.
+
+If your deployment story is shit, then it has priority over everything else to get it into a great state. Unless it's great, things will suck and not get better.
+
+---
+
+What else should be do? Story time. I was working in a company that did price comparisons of products. Incidentally, that's the same company Miro works in, one of the keynote speakers of this conference and a very talented developer. Anyways, we would collect offers from ecommerce shops and match them, meaning: Finding out which offers describe the same product, so that we can compare their prices.
+
+But not all products we found that way are actually relevant, only a small subset is. That's important, because google ranks your website low if you have a great deal of irrelevant sub-pages, so our goal was to limit the set of products to those that are actually interesting to our users. The logic was a bit convoluted, like: at least 3 offers and a picture, or a number of properties we could determine, or one of our editors had marked it as relevant, or something along these lines. I don't know exactly, and the problem is: Neither did I or my collegues know that exactly back then. The logic was implemented in an old codebase based on a map-reduce-system called _disco_, a map-reduce framework by a company some of you might remember named _Nokia_. That fact might also give you an idea about the time this thing was written.
+
+Needless to say, after Nokia had met its fate, its map-reduce framework was, let's say, pining for the fiords. We needed to rewrite the system, but the existing code base was difficult to understand. Map-reduce systems often are, that's why they have largely fallen out of favour. Still, in the end we were pretty sure we got it right, re-implemented it, reviewed it a lot, and deployed it on a thursday afternoon. All went well, and we went home, secure in the knowledge of a job well done. Or so it seems …
+
+During the night operations noticed an increasing lag of replication time of our master database. The next morning we checked if that was caused by our new implementation, and it turned out: Yes, it was. It was creating a whole lot more products than it was supposed to. Instead of the around 1 million products we had on our website, we were already at 3.5 million and counting. And the 2.5 million more were all trash. We immediately stopped product creation and rolled back the systems, but the damage was already done, since products were immortal and there was no process of ever cleaning up products once they were created. So I tried to quickly create a list of all trash products and got to work deleting them. From our master database. The things that were the lifeblood of our company. Manually, with sweaty fingers. On a friday afternoon. Crossing fingers that the google crawler hasn't already visited the site, demoting us and tanking our business.
+
+In the end, it went well, but I often wondered what we could have done better, and I came to the conclusion: Not much, really. Shit happens. But why have we, three experienced software engineers, not managed to replicate the behaviour of the old system and got dangerously close to something really bad? Two take-aways, I believe, stand out:
+
+---
+
+We did all that in the context of a batch-processing environment. These are not very realtimy. If you make an error, changes are that they only manifest themselves hours after deployment. That alone is reason enough to be very wary of this kind of data processing. If you can, write your software in such a way that _if_ it will fail, it will fail _right at or fater_ deployment. If your application design doesn't permit that, it's time to take a long and hard look at your application design and ponder some serious changes.
+
+In our case, we later migrated all that to an event-driven data processing system where new results, including errors, became immediately appearent right after deployment. It wasn't perfect, but it was a lot easier to reason about. Which is the second take-away.
+
+---
+
+There are a lot of architectures which are just not well suited to thinking about with a human brain. Reducers in map-reduce-systems can be such things, multi-threading code and shared memory, caching, closures, highly dynamic language features like meta-classes – all these are often somewhat easy in principle, but notoriously difficult to reason about in a complex code base. If find yourself needing those, it's often a sign of flawed application design.
+
+If, for example, you find yourself needing multi-threading or multi-processing in your code, try instead partitioning the data you operate on with a message broker like RabbitMQ or a streaming platform like Kafka. That allows you to write sequential code that's easy to reason about and parallelize on the architectural level, where many problems, like scaling and such, become a lot easier. Another wonderful tool, especially if your application is not entirely data-driven, is task schedulers like celery. 
+
+---
+
+Speaking of tasks: Imagine you wrote a task that read some information from a database, and some more data from a blob store, does some transformation, appends those back to the blob store and then triggers a follow-up task. Imagine then that this task failed. Oh no! Has it already written stuff to the blob store? Is it complete? What happens if we re-start the failed task: Would it write duplicate data? Would it overwrite valid data? Would the follow-up task now pick up _all_ the data, or just a part of it, missing some data?
+
+I don't know, and depending on the way the task is written and the type of failure, nobody knows. And thats bad. But it's preventable.
+
+---
+
+There's basically two ways to prevent it: One is to write a task so that all side effects happen within a database transaction. If you can do that, do it. But often, like in the example above, where we read and write from and to multiple sources, we don't have that choice.
+
+The other way is to write all operations, like tasks, scripts, request handlers of services and the like, in an idempotent way. Idempotency means: It does not matter if an operation is executed once or more, it as the same effect on the state it acts upon, given the same input and original state. SQL INSERTS are, for example, generally not idempotent. SQL INSERT ON CONFLICT UPDATE can be made idempotent. Increment operations are not idempotent. Aggretation operations, on the other hand, can be.
+
+The point is to carefully write all your tasks and scripts and generally things that act on the application state, including data, in a way that is idempotent. Sometimes it's not so obvious _how_ to do it, and I've found myself redesigning more parts of an application than I liked in order to make its operations idempotent, but it is always, always worth it. With idempotency you gain an incredible power: If somethings fails, you just need to get it to run again and _all_ things are fine again. You won't have to worry about data consistency from that point on. You can employ queueing systems that have at-least-once delivery guarantees and can be sure never to lose data, which is otherwise incredibly difficult to achieve in a distributed setting.
+
+Unit-Testing operations for the property of idempotency is typically fairly easy, so do it. I gives great peace of mind. 
+
+---
+
+Now let's illustrate another point by an example: Imagine you have two scripts that run in sequence, maybe transforming data, and have to exchange that data or some metadata between them. How do you go about exchanging that data? One approach is: Simple have the first script pickle the data, store it on some blob-store, and let the second script unpickle it.
+
+To be fair, that's not bad, and has the advantage of simplicity to it. However, imagine the second script's output is unexpected and need to introspect the pickle file – just opening in an editor won't cut it, you will have to write some code to make it introspectable. Moreover, imagine there's errornous data in the file, and you have to fix it, manually, because you need to get things running again – now you're in the business of re-writing this file with a new script of your own, and you better don't mess that up, because it's production, baby.
+
+----
+
+What would have been better? At least linewise JSON would allow for reading and editing the data in-place, so that would be far preferable to pickle-files, while retaining all the simplicity. But it may pay to go all the way and save the state in a proper database, at least if you've got one running anyways, because it allowes for so much more, like properly analyzing the data and making aggregations, replicating it easily, monitoring the data, send it to BI, and stuff like that. You don't need to go _full monty_ right from the beginning, starting out with a simple solution has great merits, but keep in mind that in the long run, state transparency saves a lot of money and nerves, because otherwise you will spend a lot of time trying to find out _why the hell things are the way they are_.
+
+---
+
+If we want to, we could summarize the principles of Fear-Free Software Development in a rather zen-like fashion: Don't live in the future, it will just give you anxieties. Instead, make sure that the presence is well understood and clear, and that changes only affect the presence and not some ominous time in the future.
+
+If something breaks _now_, it hurts now and can be dealt with. If you put things off into the future, you create anxieties that make you be afraid.
+
+So in concrete terms: No trying to predict errors, no trying to solve all future problems in a generic way, no safeguarding against the future with old solutions. Instead employ idempotent operations with sequential code in architectures that make reasoning about them easy, and limiting the time of behaviour change to the time of deployment.
+
+---
+
+Crucially though: You can't do it on your own. Try getting your team on board with these principles. Try listing to where they get cynical about stuff, or put off doing stuff, and encourage them to talk about what makes them feel uncomfortable. Identify code bases you'd rather not touch. Include your product owner as well.
+
+Find ways to include it into your agile process. For example, try estimating the amount of fear some change creates or eliminates. Prioritize changes that give peace of mind. Prioritize actual production behaviour changes to generalized solutions that are supposed to pay off in the future. That's not to say: Prioritize _get shit done_.
+
+Because it shouldn't contradict your _definition of done_. While coding, in every review, and before merging, make a point of explicitely asking yourself and maybe your team: Does this code change make the code base better? As in: Easier to reason about, more transparent, less generic? Because if it's not making it better, it's making it worse. And only rarely does a new feature merit making the code base worse.
+
+A fear-free code base isn't something you achieve once and be done with it: It's the result of an ongoing, continuous process, and I'd like to encourage you all to try it.
+
+Halil, do we have time for questions?
+
+---
+
+That's it, I hope you enjoyed my talk. Thanks a lot, and many thanks to all the organizers of PyCon Turkey, you are doing a great job. See you!
